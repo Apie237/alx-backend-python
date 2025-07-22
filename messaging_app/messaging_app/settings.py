@@ -126,7 +126,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Django REST Framework Configuration
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',
+        'rest_framework.permissions.IsAuthenticated',  # ALX requires this
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [  # ALX requires this setting
+        'rest_framework.authentication.SessionAuthentication',  # ALX requires this
+        'rest_framework.authentication.TokenAuthentication',
     ],
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
