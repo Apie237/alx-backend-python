@@ -1,7 +1,6 @@
 import uuid
 from django.db import models
 from django.contrib.auth.models import AbstractUser
-from django.contrib.auth import get_user_model
 
 class User(AbstractUser):
     """Extended User model with additional fields"""
@@ -17,6 +16,7 @@ class User(AbstractUser):
     email = models.EmailField(unique=True, null=False, blank=False)
     phone_number = models.CharField(max_length=20, null=True, blank=True)
     role = models.CharField(max_length=10, choices=USER_ROLES, default='guest')
+    password = models.CharField(max_length=128, null=False, blank=False)  # Explicit password field (inherited, but shown here)
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
@@ -24,6 +24,7 @@ class User(AbstractUser):
         indexes = [
             models.Index(fields=['email']),
         ]
+
 
 
 class Conversation(models.Model):
