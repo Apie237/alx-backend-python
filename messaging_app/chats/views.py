@@ -1,6 +1,7 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from .models import User, Conversation, Message
 from .serializers import (
@@ -14,17 +15,40 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
     lookup_field = 'user_id'
+    permission_classes = [IsAuthenticated]
 
 
 class ConversationViewSet(viewsets.ModelViewSet):
-    """ViewSet for Conversation operations"""
+    """ViewSet for listing conversations and creating new conversations"""
     queryset = Conversation.objects.prefetch_related('participants', 'messages')
     lookup_field = 'conversation_id'
+    permission_classes = [IsAuthenticated]
     
     def get_serializer_class(self):
         if self.action == 'list':
             return ConversationListSerializer
         return ConversationSerializer
+    
+    def create(self, request, *args, **kwargs):
+        """Create a new conversation"""
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            conversation = serializer.save()
+            response_serializer = ConversationSerializer(conversation)
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def list(self, request, *args, **kwargs):
+        """List all conversations"""
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    def retrieve(self, request, *args, **kwargs):
+        """Get a specific conversation with all messages"""
+        conversation = self.get_object()
+        serializer = ConversationSerializer(conversation)
+        return Response(serializer.data)
     
     @action(detail=True, methods=['post'])
     def add_participant(self, request, conversation_id=None):
@@ -60,11 +84,13 @@ class ConversationViewSet(viewsets.ModelViewSet):
 
 
 class MessageViewSet(viewsets.ModelViewSet):
-    """ViewSet for Message operations"""
+    """ViewSet for listing messages and sending messages to existing conversations"""
     serializer_class = MessageSerializer
     lookup_field = 'message_id'
+    permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
+        """Get messages, optionally filtered by conversation"""
         queryset = Message.objects.select_related('sender', 'conversation')
         conversation_id = self.request.query_params.get('conversation_id')
         
@@ -73,8 +99,14 @@ class MessageViewSet(viewsets.ModelViewSet):
         
         return queryset
     
+    def list(self, request, *args, **kwargs):
+        """List all messages"""
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
     def create(self, request, *args, **kwargs):
-        """Create a new message"""
+        """Send a new message to an existing conversation"""
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
             # Verify sender exists
@@ -108,3 +140,9 @@ class MessageViewSet(viewsets.ModelViewSet):
             return Response(response_serializer.data, status=status.HTTP_201_CREATED)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def retrieve(self, request, *args, **kwargs):
+        """Get a specific message"""
+        message = self.get_object()
+        serializer = self.get_serializer(message)
+        return Response(serializer.data)
