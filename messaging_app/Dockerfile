@@ -27,6 +27,5 @@ COPY . /app/
 # Expose port 8000
 EXPOSE 8000
 
-# Run the application
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
-
+# Run the application on port 8000 (-p 8000:8000 when running)
+CMD ["python3", "manage.py", "runserver", "0.0.0.0:8000"]
