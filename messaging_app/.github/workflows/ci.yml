@@ -1,0 +1,115 @@
+name: CI Pipeline - Testing and Code Quality
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root_password
+          MYSQL_DATABASE: messaging_app_test
+          MYSQL_USER: test_user
+          MYSQL_PASSWORD: test_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        cd messaging_app
+        pip install -r requirements.txt
+        pip install pytest pytest-django pytest-cov flake8 coverage
+
+    - name: Wait for MySQL to be ready
+      run: |
+        until mysqladmin ping -h localhost -u root -proot_password --silent; do
+          echo 'Waiting for MySQL...'
+          sleep 5
+        done
+
+    - name: Set up test database
+      run: |
+        mysql -h localhost -u root -proot_password -e "CREATE DATABASE IF NOT EXISTS messaging_app_test;"
+        mysql -h localhost -u root -proot_password -e "GRANT ALL PRIVILEGES ON messaging_app_test.* TO 'test_user'@'%';"
+
+    - name: Run Django migrations
+      run: |
+        cd messaging_app
+        python manage.py migrate --settings=messaging_app.settings_test
+      env:
+        DATABASE_URL: mysql://test_user:test_password@localhost:3306/messaging_app_test
+
+    - name: Run linting with flake8
+      run: |
+        cd messaging_app
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --max-complexity=10 --max-line-length=88 --statistics --exclude=migrations,venv,settings.py
+
+    - name: Run tests with pytest
+      run: |
+        cd messaging_app
+        pytest --junitxml=test-results.xml --cov=. --cov-report=xml --cov-report=html --cov-fail-under=80
+      env:
+        DATABASE_URL: mysql://test_user:test_password@localhost:3306/messaging_app_test
+        DJANGO_SETTINGS_MODULE: messaging_app.settings_test
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results
+        path: messaging_app/test-results.xml
+
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: coverage-reports
+        path: |
+          messaging_app/coverage.xml
+          messaging_app/htmlcov/
+
+    - name: Comment coverage on PR
+      if: github.event_name == 'pull_request'
+      uses: codecov/codecov-action@v3
+      with:
+        file: messaging_app/coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+    - name: Notify on failure
+      if: failure()
+      run: |
+        echo "❌ Tests failed! Check the logs for details."
+        echo "Build URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
