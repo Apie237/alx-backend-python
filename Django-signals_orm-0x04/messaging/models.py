@@ -12,6 +12,10 @@ class Message(models.Model):
     parent_message = models.ForeignKey(
         'self', null=True, blank=True, on_delete=models.CASCADE, related_name="replies"
     )
+    # ✅ NEW: Track who edited the message
+    edited_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL, related_name="edited_messages"
+    )
 
     def __str__(self):
         return f"From {self.sender} to {self.receiver}: {self.content[:20]}"
@@ -31,6 +35,10 @@ class MessageHistory(models.Model):
     message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name="history")
     old_content = models.TextField()
     edited_at = models.DateTimeField(auto_now_add=True)
+    # ✅ NEW: Track who performed the edit
+    edited_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL, related_name="history_edits"
+    )
 
     def __str__(self):
         return f"History for Message {self.message.id} at {self.edited_at}"
